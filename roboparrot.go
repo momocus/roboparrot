@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -12,22 +14,31 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-func main() {
-	loadEnv()
+var (
+	client              *openai.Client
+	conversationHistory string
+)
 
+func init() {
+	loadEnv()
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	client = openai.NewClient(apiKey)
+}
+
+func main() {
 	token := os.Getenv("DISCORD_TOKEN")
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
-			fmt.Println("Error creating Discord session: ", err)
-			return
+		fmt.Println("Error creating Discord session: ", err)
+		return
 	}
 
 	dg.AddHandler(messageCreate)
 
 	err = dg.Open()
 	if err != nil {
-			fmt.Println("Error opening Discord session: ", err)
-			return
+		fmt.Println("Error opening Discord session: ", err)
+		return
 	}
 
 	fmt.Println("Bot is now running. Press CTRL-C to exit.")
@@ -42,22 +53,22 @@ func loadEnv() {
 	}
 }
 
-
+// messageCreate is called when a message is sent on discord
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
-			return
+		return
 	}
 
-	if strings.HasPrefix(m.Content, "!gpt ") {
-			response, _ := chat(m.Content[5:])
-			s.ChannelMessageSend(m.ChannelID, response)
-	}
+	response, _ := callGPT3Dot5TurboAPI(m.Content)
+	s.ChannelMessageSend(m.ChannelID, response)
 }
 
 // creates a message by GPT-3.5
-func chat(message string) (string, error) {
-	apiKey := os.Getenv("OPENAI_TOKEN")
-	client := openai.NewClient(apiKey)
+func callGPT3Dot5TurboAPI(message string) (string, error) {
+	message = strings.TrimSpace(message)
+	// 履歴を維持するため、現在の会話履歴に新しいプロンプトを追加します。
+	conversationHistory += "User: " + message + "\nAI: "
+
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
@@ -65,7 +76,7 @@ func chat(message string) (string, error) {
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: message,
+					Content: conversationHistory,
 				},
 			},
 		},
@@ -74,6 +85,35 @@ func chat(message string) (string, error) {
 		fmt.Printf("ChatCompletion error: %v\n", err)
 		return "", err
 	}
+	// 生成されたレスポンスを履歴に追加
+	response := resp.Choices[0].Message.Content
+	conversationHistory += response + "\n"
 
-	return resp.Choices[0].Message.Content, nil
+	// 履歴をJSONファイルに書き出す
+	err = writeHistoryToJSONFile(conversationHistory)
+	if err != nil {
+		return "", err
+	}
+
+	return response, nil
+}
+
+func writeHistoryToJSONFile(history string) error {
+	// 履歴をJSON形式で保存するために、文字列をマップに変換します。
+	historyMap := map[string]string{
+		"history": history,
+	}
+
+	// マップをJSONに変換します。
+	jsonHistory, err := json.Marshal(historyMap)
+	if err != nil {
+		return err
+	}
+
+	// JSONデータをファイルに書き込みます。
+	err = ioutil.WriteFile("conversation_history.json", jsonHistory, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
