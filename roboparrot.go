@@ -55,12 +55,27 @@ func loadEnv() {
 
 // messageCreate is called when a message is sent on discord
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	// ボット自身からのメッセージは無視する
 	if m.Author.ID == s.State.User.ID {
+		return
+	}
+
+	// メッセージにボットへのメンションが含まれていなければ無視する
+	if !isBotMentioned(s.State.User.ID, m.Message.Mentions) {
 		return
 	}
 
 	response, _ := callGPT3Dot5TurboAPI(m.Content)
 	s.ChannelMessageSend(m.ChannelID, response)
+}
+
+func isBotMentioned(botID string, mentions []*discordgo.User) bool {
+	for _, user := range mentions {
+		if user.ID == botID {
+			return true
+		}
+	}
+	return false
 }
 
 // creates a message by GPT-3.5
