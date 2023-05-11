@@ -65,7 +65,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	response, _ := callGPT3Dot5TurboAPI(m.Content)
+	response, _ := callGPT4(m.Content)
 	s.ChannelMessageSend(m.ChannelID, response)
 }
 
@@ -78,8 +78,8 @@ func isBotMentioned(botID string, mentions []*discordgo.User) bool {
 	return false
 }
 
-// creates a message by GPT-3.5
-func callGPT3Dot5TurboAPI(message string) (string, error) {
+// creates a message by GPT-4
+func callGPT4(message string) (string, error) {
 	message = strings.TrimSpace(message)
 	// 履歴を維持するため、現在の会話履歴に新しいプロンプトを追加します。
 	conversationHistory += "User: " + message + "\nAI: "
@@ -87,7 +87,7 @@ func callGPT3Dot5TurboAPI(message string) (string, error) {
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo,
+			Model: openai.GPT4,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
